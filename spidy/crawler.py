@@ -222,6 +222,14 @@ class RobotsIndex(object):
         checker = robots.agent(self.user_agent)
         self.index[urlparsed.hostname] = checker
 
+class Page:
+    """
+    Handle some data about a page
+    """
+    def __init__(self, url, links_count = 0, importance = 0):
+        self.url = url
+        self.links_count = links_count
+        self.importance = importance
 
 #############
 # FUNCTIONS #
@@ -329,25 +337,26 @@ def crawl_worker(thread_id, robots_index):
             # Crawl the page
             else:
                 try:
-                    url = TODO.get(block=False)
+                    page = TODO.get(block=False)
                 except queue.Empty:
                     continue
                 else:
-                    if check_link(url, robots_index):  # If the link is invalid
+                    if check_link(page.url, robots_index):  # If the link is invalid
                         continue
-                    links = crawl(url, thread_id)
+                    links = crawl(page.url, thread_id)
                     for link in links:
                         # Skip empty links
                         if len(link) <= 0 or link == "/":
                             continue
                         # If link is relative, make it absolute
                         if link[0] == '/':
-                            if url[-1] == '/':
-                                link = url[:-1] + link
+                            if page.url[-1] == '/':
+                                link = page.url[:-1] + link
                             else:
-                                link = url + link
-                        TODO.put(link)
-                    DONE.put(url)
+                                link = page.url + link
+                        TODO.put(Page(link))
+                    page.links_count = len(links)
+                    DONE.put(page)
                     COUNTER.increment()
                     TODO.task_done()
 
@@ -484,6 +493,8 @@ def make_words(site):
             word_list.remove(word)  # Remove invalid word from list
     return word_list
 
+def format_line(page):
+    return '{url}\tlinks({links_count})\tPI({importante})'.format(url=page.url, links_count=page.links_count, importance=page.importance)
 
 def save_files():
     """
@@ -496,7 +507,7 @@ def save_files():
     with open(TODO_FILE, 'w', encoding='utf-8', errors='ignore') as todoList:
         for site in copy(TODO.queue):
             try:
-                todoList.write(site + '\n')  # Save TODO list
+                todoList.write(format_line(site) + '\n')  # Save TODO list
             except UnicodeError:
                 continue
     write_log('SAVE', 'Saved TODO list to {0}'.format(TODO_FILE))
@@ -504,7 +515,7 @@ def save_files():
     with open(DONE_FILE, 'w', encoding='utf-8', errors='ignore') as done_list:
         for site in copy(DONE.queue):
             try:
-                done_list.write(site + '\n')  # Save done list
+                done_list.write(format_line(site) + '\n')  # Save done list
             except UnicodeError:
                 continue
     write_log('SAVE', 'Saved DONE list to {0}'.format(TODO_FILE))
@@ -1090,7 +1101,7 @@ def init():
     if OVERWRITE:
         write_log('INIT', 'Creating save files...')
         for start in START:
-            TODO.put(start)
+            TODO.put(Page(start))
         DONE = queue.Queue()
     else:
         write_log('INIT', 'Loading save files...')
@@ -1115,7 +1126,7 @@ def init():
         # If TODO list is empty, add default starting pages
     if TODO.qsize() == 0:
         for start in START:
-            TODO.put(start)
+            TODO.put(Page(start))
 
 
 def spawn_threads(robots_index):
