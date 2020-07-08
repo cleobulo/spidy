@@ -214,7 +214,7 @@ class RobotsIndex(object):
 
     def _remember(self, url):
         urlparsed = urllib.parse.urlparse(url)
-        robots_url = urllib.parse.urljoin(urlparsed.path, '/robots.txt')
+        robots_url = urllib.parse.urljoin(url, '/robots.txt')
         write_log('ROBOTS',
                   'Reading robots.txt file at: {0}'.format(robots_url),
                   package='reppy')
@@ -338,22 +338,23 @@ def crawl_worker(thread_id, robots_index):
             else:
                 try:
                     page = TODO.get(block=False)
+                    url = page.url
                 except queue.Empty:
                     continue
                 else:
-                    if check_link(page.url, robots_index):  # If the link is invalid
+                    if check_link(url, robots_index):  # If the link is invalid
                         continue
-                    links = crawl(page.url, thread_id)
+                    links = crawl(url, thread_id)
                     for link in links:
                         # Skip empty links
                         if len(link) <= 0 or link == "/":
                             continue
                         # If link is relative, make it absolute
                         if link[0] == '/':
-                            if page.url[-1] == '/':
-                                link = page.url[:-1] + link
+                            if url[-1] == '/':
+                                link = url[:-1] + link
                             else:
-                                link = page.url + link
+                                link = url + link
                         TODO.put(Page(link))
                     page.links_count = len(links)
                     DONE.put(page)
@@ -494,7 +495,7 @@ def make_words(site):
     return word_list
 
 def format_line(page):
-    return '{url}\tlinks({links_count})\tPI({importante})'.format(url=page.url, links_count=page.links_count, importance=page.importance)
+    return '%s\tlinks(%s)\tPI(%s)' % (page.url, str(page.links_count), str(page.importance))
 
 def save_files():
     """
