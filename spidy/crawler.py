@@ -214,7 +214,7 @@ class RobotsIndex(object):
 
     def _remember(self, url):
         urlparsed = urllib.parse.urlparse(url)
-        robots_url = url.replace(urlparsed.path, '/robots.txt')
+        robots_url = urllib.parse.urljoin(urlparsed.path, '/robots.txt')
         write_log('ROBOTS',
                   'Reading robots.txt file at: {0}'.format(robots_url),
                   package='reppy')
