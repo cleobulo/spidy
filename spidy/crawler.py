@@ -237,6 +237,19 @@ class Page:
 
 write_log('INIT', 'Creating functions...')
 
+def reorder_queue(q):
+    todo_ordered = sorted(q, key=lambda t: t.importance, reverse=True)
+    todo_aux = queue.Queue()
+    for item in todo_ordered:
+        todo_aux.put(item)
+    return todo_aux
+
+def backlink_count(links):
+    todo_aux = queue.Queue()
+    for u in TODO.queue:
+        u.importance = u.importance + 1 if u.url in links else u.importance
+        todo_aux.put(u)
+    return todo_aux
 
 def crawl(url, thread_id=0):
     global WORDS, OVERRIDE_SIZE, HEADER, SAVE_PAGES, SAVE_WORDS
@@ -345,21 +358,23 @@ def crawl_worker(thread_id, robots_index):
                     if check_link(url, robots_index):  # If the link is invalid
                         continue
                     links = crawl(url, thread_id)
-                    for link in links:
+                    for i in range(len(links)):
                         # Skip empty links
-                        if len(link) <= 0 or link == "/":
+                        if len(links[i]) <= 0 or links[i] == "/":
                             continue
                         # If link is relative, make it absolute
-                        if link[0] == '/':
+                        if links[i][0] == '/':
                             if url[-1] == '/':
-                                link = url[:-1] + link
+                                links[i] = url[:-1] + links[i]
                             else:
-                                link = url + link
-                        TODO.put(Page(link))
+                                links[i] = url + links[i]
+                            TODO.put(Page(links[i]))
                     page.links_count = len(links)
                     DONE.put(page)
                     COUNTER.increment()
                     TODO.task_done()
+                    TODO = backlink_count(links)
+                    TODO = reorder_queue(TODO.queue)
 
         # ERROR HANDLING
         except KeyboardInterrupt:  # If the user does ^C
