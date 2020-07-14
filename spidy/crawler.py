@@ -10,6 +10,7 @@ import urllib
 import threading
 import queue
 import logging
+import csv
 
 from os import path, makedirs
 from copy import copy
@@ -238,18 +239,23 @@ class Page:
 write_log('INIT', 'Creating functions...')
 
 def reorder_queue(q):
-    todo_ordered = sorted(q, key=lambda t: t.importance, reverse=True)
-    todo_aux = queue.Queue()
-    for item in todo_ordered:
-        todo_aux.put(item)
-    return todo_aux
+    """
+    Sort the TODO queue according the imortance value.
+    """
+    t_ordered = sorted(q, key=lambda t: t.importance, reverse=True)
+    TODO.queue.clear()
+    for page in t_ordered:
+        TODO.put(page)
 
 def backlink_count(links):
-    todo_aux = queue.Queue()
-    for u in TODO.queue:
+    """
+    Count the number of links to a page (P).
+    """
+    todo = TODO.queue.copy()
+    TODO.queue.clear()
+    for u in todo:
         u.importance = u.importance + 1 if u.url in links else u.importance
-        todo_aux.put(u)
-    return todo_aux
+        TODO.put(u)
 
 def crawl(url, thread_id=0):
     global WORDS, OVERRIDE_SIZE, HEADER, SAVE_PAGES, SAVE_WORDS
@@ -373,8 +379,8 @@ def crawl_worker(thread_id, robots_index):
                     DONE.put(page)
                     COUNTER.increment()
                     TODO.task_done()
-                    TODO = backlink_count(links)
-                    TODO = reorder_queue(TODO.queue)
+                    backlink_count(links)
+                    reorder_queue(TODO.queue)
 
         # ERROR HANDLING
         except KeyboardInterrupt:  # If the user does ^C
@@ -509,8 +515,20 @@ def make_words(site):
             word_list.remove(word)  # Remove invalid word from list
     return word_list
 
-def format_line(page):
-    return '%s\tlinks(%s)\tPI(%s)' % (page.url, str(page.links_count), str(page.importance))
+def create_csv_file(csvfile, fieldnames):
+    """
+    Create csv file writer.
+    """
+    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+    writer.writeheader()
+    return writer
+
+def create_csv_reader(csvfile):
+    """
+    Create csv file reader.
+    """
+    reader = csv.DictReader(csvfile)
+    return reader
 
 def save_files():
     """
@@ -520,18 +538,23 @@ def save_files():
 
     global TODO, DONE
 
+    # Field names for csv file
+    fieldnames = ['url', 'links_count', 'importance']
+
     with open(TODO_FILE, 'w', encoding='utf-8', errors='ignore') as todoList:
+        writer = create_csv_file(todoList, fieldnames)
         for site in copy(TODO.queue):
             try:
-                todoList.write(format_line(site) + '\n')  # Save TODO list
+                writer.writerow(site.__dict__)  # Save TODO list
             except UnicodeError:
                 continue
     write_log('SAVE', 'Saved TODO list to {0}'.format(TODO_FILE))
 
     with open(DONE_FILE, 'w', encoding='utf-8', errors='ignore') as done_list:
+        writer = create_csv_file(done_list, fieldnames)
         for site in copy(DONE.queue):
             try:
-                done_list.write(format_line(site) + '\n')  # Save done list
+                writer.writerow(site.__dict__)  # Save done list
             except UnicodeError:
                 continue
     write_log('SAVE', 'Saved DONE list to {0}'.format(TODO_FILE))
@@ -1041,14 +1064,14 @@ def init():
         write_log('INIT', 'Location of the TODO save file (Default: crawler_todo.txt):', status='INPUT')
         input_ = input()
         if not bool(input_):
-            TODO_FILE = 'crawler_todo.txt'
+            TODO_FILE = 'crawler_todo.csv'
         else:
             TODO_FILE = input_
 
         write_log('INIT', 'Location of the DONE save file (Default: crawler_done.txt):', status='INPUT')
         input_ = input()
         if not bool(input_):
-            DONE_FILE = 'crawler_done.txt'
+            DONE_FILE = 'crawler_done.csv'
         else:
             DONE_FILE = input_
 
@@ -1124,19 +1147,22 @@ def init():
         # Import saved TODO file data
         try:
             with open(TODO_FILE, 'r', encoding='utf-8', errors='ignore') as f:
-                contents = f.readlines()
+                contents = create_csv_reader(f)
+                for row in contents:
+                    page = Page(row['url'], int(row['links_count']), int(row['importance']))
+                    TODO.put(page)
+                reorder_queue(TODO.queue)
         except FileNotFoundError:  # If no TODO file is present
             contents = []
-        for line in contents:
-            TODO.put(line.strip())
         # Import saved done file data
         try:
             with open(DONE_FILE, 'r', encoding='utf-8', errors='ignore') as f:
-                contents = f.readlines()
+                contents = create_csv_reader(f)
+                for row in contents:
+                    page = Page(row['url'], int(row['links_count']), int(row['importance']))
+                    DONE.put(page)
         except FileNotFoundError:  # If no DONE file is present
             contents = []
-        for line in contents:
-            DONE.put(line.strip())
         del contents
 
         # If TODO list is empty, add default starting pages
