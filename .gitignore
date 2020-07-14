@@ -1,6 +1,7 @@
 saved/
 logs/
 *.txt
+*.csv
 !requirements.txt
 *.zip
 
