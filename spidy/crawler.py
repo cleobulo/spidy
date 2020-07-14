@@ -232,6 +232,22 @@ class Page:
         self.links_count = links_count
         self.importance = importance
 
+class OrderingTypes:
+    """
+    Ordering metric types.
+    """
+    BACKLINK_COUNT = 'backlink-count'
+    BREADTH_FIRST = 'breadth-first'
+    PAGERANK = 'pagerank'
+
+    @classmethod
+    def types(cls):
+        return [
+            cls.BREADTH_FIRST,
+            cls.BACKLINK_COUNT,
+            cls.PAGERANK
+        ]
+
 #############
 # FUNCTIONS #
 #############
@@ -256,6 +272,16 @@ def backlink_count(links):
     for u in todo:
         u.importance = u.importance + 1 if u.url in links else u.importance
         TODO.put(u)
+
+def ordering_metric(links):
+    """
+    Calculate the page importance with one of the metrics.
+    """
+    if ORDERING == OrderingTypes.BREADTH_FIRST:
+        return
+    elif ORDERING == OrderingTypes.BACKLINK_COUNT:
+        backlink_count(links)
+    reorder_queue(TODO.queue)
 
 def crawl(url, thread_id=0):
     global WORDS, OVERRIDE_SIZE, HEADER, SAVE_PAGES, SAVE_WORDS
@@ -379,8 +405,7 @@ def crawl_worker(thread_id, robots_index):
                     DONE.put(page)
                     COUNTER.increment()
                     TODO.task_done()
-                    backlink_count(links)
-                    reorder_queue(TODO.queue)
+                    ordering_metric(links)
 
         # ERROR HANDLING
         except KeyboardInterrupt:  # If the user does ^C
@@ -873,7 +898,7 @@ MAX_NEW_MIMES = 0
 RESPECT_ROBOTS, RESTRICT, DOMAIN = False, False, ''
 USE_CONFIG, OVERWRITE, RAISE_ERRORS, ZIP_FILES, OVERRIDE_SIZE = False, False, False, False, False
 SAVE_PAGES, SAVE_WORDS = False, False
-TODO_FILE, DONE_FILE, WORD_FILE = '', '', ''
+TODO_FILE, DONE_FILE, WORD_FILE, ORDERING = '', '', '', ''
 TODO, DONE = queue.Queue(), queue.Queue()
 THREAD_COUNT = 1
 THREAD_LIST = []
@@ -896,7 +921,7 @@ def init():
     global USE_CONFIG, OVERWRITE, RAISE_ERRORS, ZIP_FILES, OVERRIDE_SIZE, SAVE_WORDS, SAVE_PAGES, SAVE_COUNT
     global TODO_FILE, DONE_FILE, ERR_LOG_FILE, WORD_FILE
     global RESPECT_ROBOTS, RESTRICT, DOMAIN
-    global WORDS, TODO, DONE, THREAD_COUNT
+    global WORDS, TODO, DONE, THREAD_COUNT, ORDERING
 
     # Getting Arguments
 
@@ -944,6 +969,15 @@ def init():
         elif input_.isdigit():
             THREAD_COUNT = int(input_)
         else:  # Invalid input
+            handle_invalid_input()
+
+        write_log('INIT', 'Wich metric the crawler must be use? (Default: backlink-count)')
+        input_ = input()
+        if not bool(input_):
+            ORDERING = OrderingTypes.BREADTH_FIRST
+        elif input_.lower() in OrderingTypes.types():
+            ORDERING = input_.lower()
+        else:
             handle_invalid_input()
 
         write_log('INIT', 'Should spidy load from existing save files? (y/n) (Default: Yes):', status='INPUT')
