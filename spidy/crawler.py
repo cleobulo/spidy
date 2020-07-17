@@ -273,14 +273,30 @@ def backlink_count(links):
         u.importance = u.importance + 1 if u.url in links else u.importance
         TODO.put(u)
 
-def ordering_metric(links):
+def pagerank(cpage, links):
     """
-    Calculate the page importance with one of the metrics.
+    Calculate the pagerank importance of a page (P).
+    """
+    dump = 0.85
+    todo = TODO.queue.copy()
+    TODO.queue.clear()
+    for u in todo:
+        if u.url in links:
+            if u.importance == 0.25:
+                u.importance = (1 - dump) + dump * (cpage.importance / cpage.links_count)
+            else:
+                u.importance += dump * (cpage.importance / cpage.links_count)
+
+def ordering_metric(cpage, links):
+    """
+    Calculate the page importance with one of these metrics.
     """
     if ORDERING == OrderingTypes.BREADTH_FIRST:
         return
     elif ORDERING == OrderingTypes.BACKLINK_COUNT:
         backlink_count(links)
+    elif ORDERING == OrderingTypes.PAGERANK:
+        pagerank(cpage, links)
     reorder_queue(TODO.queue)
 
 def crawl(url, thread_id=0):
@@ -405,7 +421,7 @@ def crawl_worker(thread_id, robots_index):
                     DONE.put(page)
                     COUNTER.increment()
                     TODO.task_done()
-                    ordering_metric(links)
+                    ordering_metric(page, links)
 
         # ERROR HANDLING
         except KeyboardInterrupt:  # If the user does ^C
